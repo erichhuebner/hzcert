@@ -1,0 +1,162 @@
+#!/bin/bash
+#
+# Dependencies:
+#	wget, /etc/hubzero.conf
+#
+# This script is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Lesser General Public License for more details.
+#
+# HUBzero is a registered trademark of Purdue University.
+#
+# @organization   HUBzero
+# @author    Erich Huebner <erich.w.huebner@gmail.com>
+# @copyright Copyright 2017 Purdue University. All rights reserved.
+# @license   http://www.gnu.org/licenses/lgpl-3.0.html LGPLv3
+
+function certbotinstall() {
+
+    #Determine Debian or Centos/Redhat webserver
+    if [ -d "/etc/apache2" ]; then
+            webserver=apache2
+	#Install wget if not installed
+		#apt-get install wget
+    elif [ -d "/etc/httpd" ]; then
+            webserver=httpd
+	#Install wget if not installed
+		#yum install wget
+    fi
+
+	#Create directory for letsencrypt and change into it
+	if [ ! -d "/opt/letsencrypt" ];then
+		mkdir /opt/letsencrypt
+		echo "Directory /opt/letsencrypt created."
+	fi
+
+	if [ ! -f "/opt/letsencrypt/certbot-auto" ];then
+		cd /opt/letsencrypt
+		#Download the certbot software
+		wget https://dl.eff.org/certbot-auto
+		#Modify permissions to allow script execution
+		chmod a+x /opt/letsencrypt/certbot-auto
+		echo "Certbot software installed"
+	fi
+
+	#Install cron job to check for rewnewals weekly at 00:01 on Sunday.
+        echo "1 0 * * 0      root     /opt/letsencrypt/certbot-auto renew --no-self-upgrade" > /etc/cron.d/letsencryptrenew
+       	#restart Cron Deamon
+	
+	if [ -d "/etc/apache2" ]; then
+		/etc/init.d/cron restart
+        elif [ -d "/etc/httpd" ]; then
+		/etc/init.d/crond restart
+        fi
+
+	echo "A cron job is now installed and will run at 00:01 on Sunday to check if the installed certificate has expired and will renew prior to the expiration date"
+
+	#Create directory for backups of configuration files
+	if [ ! -d "/opt/letsencrypt/backups" ];then
+		mkdir /opt/letsencrypt/backups
+		echo "Directory /opt/letsencrypt/backups created."
+	fi
+
+	#Set some varialbes from /etc/hubzero.conf
+	hubname=$(grep --ignore-case hubname /etc/hubzero.conf | sed 's/hubname = //I')
+	documentroot=$(grep --ignore-case documentroot /etc/hubzero.conf | sed 's/documentroot = //I')
+	m4sslfilename=$hubname-ssl.m4
+	
+	echo "Webserver is $webserver"
+	echo "Hubname is $hubname"
+	echo "DocumentRoot is $documentroot"
+	echo "m4sslfilename is $m4sslfilename"
+
+	#Get the cert
+	LE_OUTPUT=$(/opt/letsencrypt/certbot-auto certonly --non-interactive --agree-tos -m $1 --webroot --webroot-path $documentroot -d $2)
+
+	if [ "tail /var/log/letsencrypt/letsencrypt.log | grep -q error" ]; then
+	       	exit 1
+	fi
+
+	#Backup the origianl m4 file
+	if [ ! -f "/opt/letsencrypt/backups/$m4sslfilename.orig" ];then
+		cp /etc/${webserver}/sites-m4/$m4sslfilename /opt/letsencrypt/backups/$m4sslfilename.orig
+	fi
+
+	#Install the cert
+	sed -i "s/\(SSLCertificateFile *\).*/\1\/etc\/letsencrypt\/live\/${2}\/fullchain.pem/" /etc/${webserver}/sites-m4/$m4sslfilename
+	sed -i "s/\(SSLCertificateKeyFile *\).*/\1\/etc\/letsencrypt\/live\/${2}\/privkey.pem/" /etc/${webserver}/sites-m4/$m4sslfilename
+	sed -i "s/\(SSLCertificateChainFile *\).*/\1\/etc\/letsencrypt\/live\/${2}\/chain.pem/" /etc/${webserver}/sites-m4/$m4sslfilename
+
+	#backup original hzvncproxyd-ws files
+	if [ ! -f "/opt/letsencrypt/backups/ssl-cert-hzvncproxyd-ws.key.orig" ];then
+		mv /etc/hzvncproxyd-ws/ssl-cert-hzvncproxyd-ws.key /opt/letsencrypt/backups/ssl-cert-hzvncproxyd-ws.key.orig
+	fi
+
+	if [ ! -f "/opt/letsencrypt/backups/ssl-cert-hzvncproxyd-ws.pem.orig" ];then
+		mv /etc/hzvncproxyd-ws/ssl-cert-hzvncproxyd-ws.pem /opt/letsencrypt/backups/ssl-cert-hzvncproxyd-ws.pem.orig
+	fi
+
+	#Configure new certs for hzvncproxyd-ws service
+	cp /etc/letsencrypt/live/${2}/fullchain.pem /etc/hzvncproxyd-ws/ssl-cert-hzvncproxyd-ws.pem
+	cp /etc/letsencrypt/live/${2}/privkey.pem /etc/hzvncproxyd-ws/ssl-cert-hzvncproxyd-ws.key
+	chown hzvncproxy:hzvncproxy /etc/hzvncproxyd-ws/ssl-cert-hzvncproxyd-ws.pem /etc/hzvncproxyd-ws/ssl-cert-hzvncproxyd-ws.key
+	chmod a+r /etc/hzvncproxyd-ws/ssl-cert-hzvncproxyd-ws.pem /etc/hzvncproxyd-ws/ssl-cert-hzvncproxyd-ws.key
+
+	#Update the CMS and hzvncproxyd-ws service
+	hzcms update
+	hzvncproxyd-ws-config configure --enable
+}
+
+function certbotrevoke() {
+	/opt/letsencrypt/certbot-auto revoke --cert-path /etc/letsencrypt/live/${1}/cert.pem
+}
+
+function certbotdelete() {
+	/opt/letsencrypt/certbot-auto delete --cert-name ${1}
+}
+
+#check for user input, output help when no arguments entered.
+if [ $# -eq 0 ] || [ $1 == "-h" ] || [ $1 == "--help" ];then
+	echo -e "hzcert - Manages Let's Encrypt SSL certificates via Certbot in the Hubzero environment.\n"
+
+	echo -e "Usage:"
+	echo -e "	hzcert install"
+	echo -e "	hzcert revoke "
+	echo -e "	hzcert delete"
+	echo -e "	hzcert status"
+	echo -e "	hzcert -h | --help\n"
+
+	echo -e "Options:"
+	echo -e "	-h --help	Show this screen.\n"
+
+	echo -e "'hzcert install' prompts the user for the required Certificate information, email address and fully qualified domain name."
+	echo -e "'hzcert revoke' prompts the uer for the required information, fully qualified domain name."
+	echo -e "'hzcert delete' prompts the use for the required information, fully qualified domain name."
+	echo -e "'hzcert status' displays informations related to all certificates installed on the system."
+	echo -e "An internet connection on ports 80 and 443 is required.\n"
+	exit
+fi
+
+if [ $# -eq 1 ] && [ "$1" == "status" ];then
+	/opt/letsencrypt/certbot-auto certificates
+elif [ "$1" == "install" ];then
+	echo  -n "Enter Email Address: "
+	read email
+	echo -n "Enter site FQDN: "
+	read fqdn
+	certbotinstall $email $fqdn
+
+elif [ $# -eq 1 ] && [ "$1" == "revoke" ];then
+	echo -n "Enter site FQDN: "
+	read fqdn
+	certbotrevoke $fqdn
+
+elif [ $# -eq 1 ] && [ "$1" == "delete" ];then
+   	echo -n "Enter site FQDN: "
+	read fqdn
+	certbotdelete $fqdn
+
+else
+        echo "Please enter the required options"
+fi

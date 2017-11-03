@@ -72,7 +72,7 @@ function certbotinstall() {
 	echo "m4sslfilename is $m4sslfilename"
 
 	#Get the cert
-	LE_OUTPUT=$(/opt/letsencrypt/certbot-auto certonly --test-cert --non-interactive --agree-tos -m $1 --webroot --webroot-path $documentroot -d $2)
+	LE_OUTPUT=$(/opt/letsencrypt/certbot-auto certonly --non-interactive --agree-tos -m $1 --webroot --webroot-path $documentroot -d $2)
 
 	if $(tail /var/log/letsencrypt/letsencrypt.log | grep -q error); then
 		echo -e "Exiting with Errors.  See /var/log/letsencrypt/letsencrypt.log"
@@ -110,11 +110,11 @@ function certbotinstall() {
 }
 
 function certbotrevoke() {
-	/opt/letsencrypt/certbot-auto revoke --test-cert --cert-path /etc/letsencrypt/live/${1}/cert.pem
+	/opt/letsencrypt/certbot-auto revoke --cert-path /etc/letsencrypt/live/${1}/cert.pem
 }
 
 function certbotdelete() {
-	/opt/letsencrypt/certbot-auto delete --test-cert --cert-name ${1}
+	/opt/letsencrypt/certbot-auto delete --cert-name ${1}
 }
 
 #check for user input, output help when no arguments entered.

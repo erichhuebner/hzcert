@@ -118,6 +118,7 @@ function certbotdelete() {
 
 #check for user input, output help when no arguments entered.
 if [ $# -eq 0 ] || [ $1 == "-h" ] || [ $1 == "--help" ];then
+	echo -e "\n"
 	echo -e "hzcert - Manages Let's Encrypt SSL certificates via Certbot in the Hubzero environment.\n"
 
 	echo -e "Usage:"

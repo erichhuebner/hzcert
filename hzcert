@@ -74,7 +74,7 @@ function certbotinstall() {
 	#Get the cert
 	LE_OUTPUT=$(/opt/letsencrypt/certbot-auto certonly --test-cert --non-interactive --agree-tos -m $1 --webroot --webroot-path $documentroot -d $2)
 
-	if [ "tail /var/log/letsencrypt/letsencrypt.log | grep -q error" ]; then
+	if $(tail /var/log/letsencrypt/letsencrypt.log | grep -q error); then
 		echo -e "Exiting with Errors.  See /var/log/letsencrypt/letsencrypt.log"
 	       	exit 1
 	fi

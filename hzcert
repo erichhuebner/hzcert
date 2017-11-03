@@ -72,7 +72,7 @@ function certbotinstall() {
 	echo "m4sslfilename is $m4sslfilename"
 
 	#Get the cert
-	LE_OUTPUT=$(/opt/letsencrypt/certbot-auto certonly --test-cert --non-interactive --agree-tos -m $1 --webroot --webroot-path $documentroot -d $2 -d www.$2 -d vncproxy.$2 -d proxy.$2 -d webdav.$2)
+	LE_OUTPUT=$(/opt/letsencrypt/certbot-auto certonly --test-cert --non-interactive --agree-tos -m $1 --webroot --webroot-path $documentroot -d $2)
 
 	if $(tail /var/log/letsencrypt/letsencrypt.log | grep -q error); then
 		echo -e "Exiting with Errors.  See /var/log/letsencrypt/letsencrypt.log"

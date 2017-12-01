@@ -105,8 +105,10 @@ function certbotinstall() {
 	chmod a+r /etc/hzvncproxyd-ws/ssl-cert-hzvncproxyd-ws.pem /etc/hzvncproxyd-ws/ssl-cert-hzvncproxyd-ws.key
 
 	#Update the CMS and hzvncproxyd-ws service
-	hzcms update
-	hzvncproxyd-ws-config configure --enable
+	#hzcms update
+	#hzvncproxyd-ws-config configure --enable
+	hzcms reconfigure $hubname
+	/etc/init.d/apache2 restart
 }
 
 function certbotrevoke() {
